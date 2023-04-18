@@ -212,7 +212,7 @@ parseTyped ms'' = do
                     then liftIO $ hGetStringBuffer (getModSumOrig ms'')
                     else return (fromJust $ ms_hspp_buf $ pm_mod_summary p')
   liftIO $ print "after srcBuffer"
-  x <- withTempSession (\e -> e { hsc_dflags = ms_hspp_opts ms })
+  withTempSession (\e -> e { hsc_dflags = ms_hspp_opts ms })
     $ (if hasCppExtension then prepareASTCpp else prepareAST) srcBuffer . placeComments (fst annots) (getNormalComments $ snd annots)
         <$> (addTypeInfos (typecheckedSource tc)
                =<< (do parseTrf <- runTrf (fst annots) (getPragmaComments $ snd annots) $ trfModule ms (pm_parsed_source p')
@@ -221,8 +221,6 @@ parseTyped ms'' = do
                                     (fromJust $ tm_renamed_source tc)
                                     (pm_parsed_source p')
                        return x))
-  liftIO $ print $ "after srcBuffer" ++ (prettyPrint x)
-  return x
 
 data UnsupportedExtension = UnsupportedExtension String
   deriving Show

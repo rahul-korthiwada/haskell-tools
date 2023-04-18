@@ -114,7 +114,7 @@ getDeps mod = do
                       _ -> case lookupPluginModuleWithSuggestions (hsc_dflags env) modName Nothing of
                              LookupFound m _ -> return m
                              LookupHidden hiddenPack hiddenMod -> return (head $ map fst hiddenMod ++ map fst hiddenPack)
-                             _ -> error $ "getDeps: module not found: " ++ GHC.moduleNameString modName
+                             _ -> return mod
 
 -- | Get names that are imported from a given import
 getImportedNames :: String -> Maybe String -> Trf (GHC.Module, [PName GhcRn])
@@ -305,8 +305,7 @@ focusAfter firstTok trf
   = do firstToken <- tokenLoc firstTok
        if (isGoodSrcSpan firstToken)
           then local (\s -> s { contRange = mkSrcSpan (srcSpanEnd firstToken) (srcSpanEnd (contRange s))}) trf
-          else do rng <- asks contRange
-                  convertionProblem $ "focusAfter: token not found in " ++ show rng ++ ": " ++ show firstTok
+          else trf
 
 focusAfterIfPresent :: AnnKeywordId -> Trf a -> Trf a
 focusAfterIfPresent firstTok trf
@@ -321,8 +320,9 @@ focusBefore lastTok trf
   = do lastToken <- tokenLocBack lastTok
        if (isGoodSrcSpan lastToken)
           then local (\s -> s { contRange = mkSrcSpan (srcSpanStart (contRange s)) (srcSpanStart lastToken)}) trf
-          else do rng <- asks contRange
-                  convertionProblem $ "focusBefore: token not found in " ++ show rng ++ ": " ++ show lastTok
+          else trf 
+          -- rng <- asks contRange
+          --         convertionProblem $ "focusBefore: token not found in " ++ show rng ++ ": " ++ show lastTok
 
 focusBeforeIfPresent :: AnnKeywordId -> Trf a -> Trf a
 focusBeforeIfPresent lastTok trf

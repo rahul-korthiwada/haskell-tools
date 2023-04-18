@@ -23,6 +23,7 @@ trfLiteral' (HsCharPrim _ ch) = pure $ AST.UPrimCharLit ch
 trfLiteral' (HsString _ str) = pure $ AST.UStringLit (unpackFS str)
 trfLiteral' (HsStringPrim _ str) = pure $ AST.UPrimStringLit (BS.foldr (:) "" str)
 trfLiteral' (HsIntPrim _ i) = pure $ AST.UPrimIntLit i
+trfLiteral' (HsInt _ i) = pure $ AST.UPrimIntLit (il_value i)
 trfLiteral' (HsWordPrim _ i) = pure $ AST.UPrimWordLit i
 trfLiteral' (HsInt64Prim _ i) = pure $ AST.UPrimIntLit i
 trfLiteral' (HsWord64Prim _ i) = pure $ AST.UPrimWordLit i

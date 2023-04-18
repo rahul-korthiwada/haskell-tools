@@ -39,9 +39,9 @@ printRose' parent (RoseTree (RoseSpan (SourceTemplateNode rng elems minInd relIn
              where txt = concatMap (^. sourceTemplateText) txtElems
            printTemplateElems (ChildElem : rest) (child : children) = printRose' parent child >+< printTemplateElems rest children
            printTemplateElems [] [] = return empty
-           printTemplateElems _ []
-             = pprProblem $ "More child elem in template than actual children in: "
-                              ++ shortShowSpanWithFile (srcLocSpan $ RealSrcLoc parent)
+           printTemplateElems _ [] = return empty
+            --  = pprProblem $ "More child elem in template than actual children in: "
+            --                   ++ shortShowSpanWithFile (srcLocSpan $ RealSrcLoc parent)
            printTemplateElems [] _
              = return empty
             --  pprProblem $ "Not all children are used to pretty printing in: "

@@ -54,7 +54,7 @@ cutOutElemSpan sps (NormNodeInfo (RealSrcSpan sp))
              -- only continue if the correct place for the child range is not found
               Just pieces -> trace "Reached cutOutElemSpan 1"  $ pieces ++ rest
               Nothing -> trace ("Reached cutOutElemSpan 2" ++ show elem) $ elem : (breakFirstHit False) rest sp
-        breakFirstHit opt sps (RealSrcSpan inner) = [RangeElem inner] --trace "Reached cutOutElemSpan 3" $ throw $ BreakUpProblem sp inner sps
+        breakFirstHit opt sps (RealSrcSpan inner) = [RangeChildElem] --trace "Reached cutOutElemSpan 3" $ throw $ BreakUpProblem sp inner sps
         breakFirstHit opt [] inner = trace ("Reached cutOutElemSpan 3" ++ show sps) $ throw $ BreakUpProblem sp inner sps
 cutOutElemSpan _ (NormNodeInfo (UnhelpfulSpan {}))
   = RangeTemplateNode (mkRealSrcSpan (mkRealSrcLoc (mkFastString "") 100 100) (mkRealSrcLoc (mkFastString "") 100 100)) [RangeChildElem]
