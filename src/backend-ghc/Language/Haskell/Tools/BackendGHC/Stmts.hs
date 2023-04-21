@@ -41,13 +41,16 @@ gTrfDoStmt' et (RecStmt { recS_stmts = stmts }) = AST.URecStmt <$> trfAnnList ",
 gTrfDoStmt' _ stmt = unhandledElement "simple statement" stmt
 
 trfListCompStmts :: (TransformName n r, n ~ GhcPass p) => [Located (Stmt n (LHsExpr n))] -> Trf (AnnListG AST.UListCompBody (Dom r) RangeStage)
-trfListCompStmts [unLoc -> ParStmt _ blocks _ _, unLoc -> (LastStmt {})]
+trfListCompStmts loc = trfListCompStmts' $ filter (isGoodSrcSpan . getLoc) loc
+
+trfListCompStmts' :: (TransformName n r, n ~ GhcPass p) => [Located (Stmt n (LHsExpr n))] -> Trf (AnnListG AST.UListCompBody (Dom r) RangeStage)
+trfListCompStmts' [unLoc -> ParStmt _ blocks _ _, unLoc -> (LastStmt {})]
   = nonemptyAnnList
       <$> trfScopedSequence (\(ParStmtBlock _ stmts _ _) ->
                                 let ann = collectLocs $ getNormalStmts stmts
                                  in annLocNoSema (pure ann) (AST.UListCompBody <$> makeList "," (pure $ srcSpanStart ann) (concat <$> trfScopedSequence trfListCompStmt stmts))
                             ) blocks
-trfListCompStmts others
+trfListCompStmts' others
   = let ann = (collectLocs $ getNormalStmts others)
      in makeList "|" (pure $ srcSpanStart ann)
           ((:[]) <$> annLocNoSema (pure ann)
@@ -73,11 +76,15 @@ extractActualStmt = \case
                             <$> tokenLocBack AnnThen)
 
 getNormalStmts :: [Located (Stmt n (LHsExpr n))] -> [Located (Stmt n (LHsExpr n))]
-getNormalStmts (L _ (LastStmt _ _ _ _) : rest) = getNormalStmts rest
-getNormalStmts (stmt : rest) = stmt : getNormalStmts rest
-getNormalStmts [] = []
+getNormalStmts loc = getNormalStmts' $ filter (isGoodSrcSpan . getLoc) loc
+
+getNormalStmts' (L _ (LastStmt _ _ _ _) : rest) = getNormalStmts' rest
+getNormalStmts' (stmt : rest) = stmt : getNormalStmts' rest
+getNormalStmts' [] = []
 
 getLastStmt :: [Located (Stmt n (LHsExpr n))] -> Located (HsExpr n)
-getLastStmt (L _ (LastStmt _ body _ _) : _) = body
-getLastStmt (_ : rest) = getLastStmt rest
-getLastStmt [] = convProblem "getLastStmt: empty"
+getLastStmt loc = getLastStmt' $ filter (isGoodSrcSpan . getLoc) loc
+
+getLastStmt' (L _ (LastStmt _ body _ _) : _) = body
+getLastStmt' (_ : rest) = getLastStmt' rest
+getLastStmt' [] = convProblem "getLastStmt': empty"

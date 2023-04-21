@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -83,14 +84,14 @@ addTypeInfos bnds mod = do
         decompedOverloadedLits :: [(SrcSpan, Type)]
         decompedOverloadedLits = catMaybes $ map decompExprLit exprLits ++ (map (\pat -> Just (getLoc pat, decompPatLit $ unLoc pat)) patLits)
           where exprLits :: [LHsExpr GhcTc]
-                exprLits = concatMap universeBi . bagToList $ bnds
+                exprLits = filter (isGoodSrcSpan . getLoc) $ concatMap universeBi . bagToList $ bnds
 
                 decompExprLit :: LHsExpr GhcTc -> Maybe (SrcSpan, Type)
                 decompExprLit (L loc (HsOverLit _ lit)) = Just (loc, ol_type (ol_ext lit))
                 decompExprLit x = Nothing
 
                 patLits :: [LPat GhcTc]
-                patLits = concatMap universeBi . bagToList $ bnds
+                patLits = filter (isGoodSrcSpan . getLoc) $ concatMap universeBi . bagToList $ bnds
 
                 decompPatLit (NPat llit _ _ _) = llit
 
@@ -109,10 +110,11 @@ addTypeInfos bnds mod = do
 
 extractExprIds :: LHsBinds GhcTc -> [Located Id]
         -- expressions like HsRecFld are removed from the typechecked representation, they are replaced by HsVar
-extractExprIds = catMaybes . map (\case L l (HsVar _ (L _ n) :: HsExpr GhcTc) -> Just (L l n)
-                                        L l (HsWrap _ _ (HsVar _ (L _ n))) -> Just (L l n)
-                                        _ -> Nothing
-                                 ) . concatMap universeBi . bagToList
+extractExprIds x = let y = catMaybes . map (\case L l (HsVar _ (L _ n) :: HsExpr GhcTc) -> Just (L l n)
+                                                  L l (HsWrap _ _ (HsVar _ (L _ n))) -> Just (L l n)
+                                                  _ -> Nothing
+                                 ) . concatMap universeBi . bagToList $ x
+                  in filter (isGoodSrcSpan . getLoc) y
 
 extractSigIds :: LHsBinds GhcTc -> [(SrcSpan,Id)]
 extractSigIds = filter (isGoodSrcSpan . fst)

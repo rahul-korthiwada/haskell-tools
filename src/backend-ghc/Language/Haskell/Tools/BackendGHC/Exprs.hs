@@ -38,19 +38,19 @@ import Unsafe.Coerce (unsafeCoerce)
 
 trfExpr :: forall n r p . (TransformName n r, n ~ GhcPass p) => Located (HsExpr n) -> Trf (Ann AST.UExpr (Dom r) RangeStage)
 -- correction for empty cases
-trfExpr (L l cs@(HsCase _ expr (unLoc . mg_alts -> [])))
+trfExpr ex@(L l cs@(HsCase _ expr (unLoc . mg_alts -> [])))
   = do let realSpan = combineSrcSpans l (getLoc expr)
        tokensAfter <- allTokensAfter (srcSpanEnd realSpan)
        let actualSpan = case take 3 tokensAfter of
                           [(_, AnnOf), (_, AnnOpenC), (endSpan, AnnCloseC)] -> realSpan `combineSrcSpans` endSpan
                           ((endSpan, AnnOf) : _) -> realSpan `combineSrcSpans` endSpan
                           _ -> convProblem "trfExpr: case without 'of' '{' or '}' token"
-       annLoc createScopeInfo (pure actualSpan) (trfExpr' cs)
+       annLoc createScopeInfo (pure actualSpan) (if isGoodSrcSpan $ getLoc ex then trfExpr' cs else return AST.UHole)
 trfExpr e | RealSrcSpan loce <- getLoc e
   = do exprSpls <- asks exprSplices
        let contSplice = filter (\sp -> case getLoc sp of (RealSrcSpan spLoc) -> spLoc `containsSpan` loce; _ -> False) exprSpls
        case contSplice of
-         [] -> trfLoc trfExpr' createScopeInfo e
+         [] -> if isGoodSrcSpan $ getLoc e then trfLoc trfExpr' createScopeInfo e else trfLoc (const $ return AST.UHole) createScopeInfo e
          _ -> let lsp@(L l sp) = minimumBy (compareSpans `on` getLoc) contSplice
                in case sp of
                     (HsQuasiQuote {}) -> do
@@ -58,13 +58,14 @@ trfExpr e | RealSrcSpan loce <- getLoc e
                       exprSpliceInserted lsp (annLoc createScopeInfo (pure l) (AST.UQuasiQuoteExpr <$> annLocNoSema (pure l) (trfQuasiQuotation' sp')))
                     _ -> do sp' <- rdrSplice sp
                             exprSpliceInserted lsp (annLoc createScopeInfo (pure l) (AST.USplice <$> trfSplice sp'))
-  | otherwise = trfLoc trfExpr' createScopeInfo e
+  | otherwise = if isGoodSrcSpan $ getLoc e then trfLoc trfExpr' createScopeInfo e else trfLoc (const $ return AST.UHole) createScopeInfo e
 
 createScopeInfo :: Trf ScopeInfo
 createScopeInfo = do scope <- asks localsInScope
                      return (mkScopeInfo scope)
 
 trfExpr' :: forall n r p . (TransformName n r, n ~ GhcPass p) => HsExpr n -> Trf (AST.UExpr (Dom r) RangeStage)
+-- trfExpr' ex | not $ isGoodSrcSpan $ getLoc ex = return AST.UHole
 trfExpr' (HsVar _ name) = AST.UVar <$> trfName @n name
 trfExpr' (HsUnboundVar _ name) = AST.UVar <$> trfNameText (occNameString $ unboundVarOcc name)
 trfExpr' (HsRecFld _ fld) = AST.UVar <$> (asks contRange >>= \l -> trfAmbiguousFieldName' l fld)
@@ -91,7 +92,7 @@ trfExpr' (HsPar _ (unLoc -> SectionL _ expr (L nameLoc (HsRecFld _ op))))
 trfExpr' (HsPar _ (unLoc -> SectionR _ (unLoc -> HsVar _ op) expr)) = AST.URightSection <$> trfOperator @n op <*> trfExpr expr
 trfExpr' (HsPar _ (unLoc -> SectionR _ (L nameLoc (HsRecFld _ op)) expr))
   = AST.URightSection <$> trfAmbiguousOperator' nameLoc op <*> trfExpr expr
-trfExpr' (HsPar _ expr) = AST.UParen <$> trfExpr expr
+trfExpr' (HsPar _ expr) = if isGoodSrcSpan $ getLoc expr then AST.UParen <$> trfExpr expr else return AST.UHole
 trfExpr' (ExplicitTuple _ tupArgs box) | all tupArgPresent tupArgs
   = wrap <$> between (if box == Boxed then AnnOpenP else AnnOpen) (if box == Boxed then AnnCloseP else AnnClose)
                (trfAnnList' ", " (trfExpr . (\(Present _ e) -> e) . unLoc) tupArgs)
@@ -224,8 +225,8 @@ gTrfAlt' te (Match _ _ [pat] (GRHSs _ rhss (unLoc -> locBinds)))
   = AST.UAlt <$> trfPattern pat <*> gTrfCaseRhss te rhss <*> trfWhereLocalBinds (collectLocs rhss) locBinds
 gTrfAlt' _ _ = convertionProblem "gTrfAlt': not exactly one alternative when transforming a case alternative"
 
-trfCaseRhss :: (TransformName n r, n ~ GhcPass p) => [Located (GRHS n (LHsExpr n))] -> Trf (Ann AST.UCaseRhs (Dom r) RangeStage)
-trfCaseRhss = gTrfCaseRhss trfExpr
+-- trfCaseRhss :: (TransformName n r, n ~ GhcPass p) => [Located (GRHS n (LHsExpr n))] -> Trf (Ann AST.UCaseRhs (Dom r) RangeStage)
+-- trfCaseRhss = gTrfCaseRhss trfExpr
 
 gTrfCaseRhss :: (TransformName n r, n ~ GhcPass p) => (Located (ge n) -> Trf (Ann ae (Dom r) RangeStage)) -> [Located (GRHS n (Located (ge n)))] -> Trf (Ann (AST.UCaseRhs' ae) (Dom r) RangeStage)
 gTrfCaseRhss te [unLoc -> GRHS _ [] body] = annLocNoSema (combineSrcSpans (getLoc body) <$> updateFocus (pure . updateEnd (const $ srcSpanStart $ getLoc body))

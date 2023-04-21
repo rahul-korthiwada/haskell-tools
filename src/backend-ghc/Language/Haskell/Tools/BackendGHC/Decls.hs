@@ -46,7 +46,8 @@ import qualified Language.Haskell.Tools.AST as AST
 import Language.Haskell.Tools.AST.SemaInfoTypes as AST (nameInfo, mkNoSemanticInfo, trfImportInfo)
 
 trfDecls :: (TransformName n r, n ~ GhcPass p, HasCallStack) => [LHsDecl n] -> Trf (AnnListG AST.UDecl (Dom r) RangeStage)
-trfDecls decls = addToCurrentScope decls $ makeIndentedListNewlineBefore atTheEnd (mapM trfDecl decls)
+trfDecls declsLoc =
+  let decls = filter (\x -> isGoodSrcSpan $ getLoc x) declsLoc in addToCurrentScope decls $ makeIndentedListNewlineBefore atTheEnd (mapM trfDecl decls)
 
 trfDeclsGroup :: forall n r p . (TransformName n r, n ~ GhcPass p, HasCallStack) => HsGroup n -> Trf (AnnListG AST.UDecl (Dom r) RangeStage)
 trfDeclsGroup g@(HsGroup _ vals splices tycls derivs fixities defaults foreigns warns anns rules _)
@@ -54,19 +55,21 @@ trfDeclsGroup g@(HsGroup _ vals splices tycls derivs fixities defaults foreigns 
                                    -- filter out the declarations that are generated from them
        let (sigs, bagToList -> binds) = getBindsAndSigs vals
            -- collect the declarations from the group
+
            alldecls :: [Located (HsDecl n)]
-           alldecls = (map (fmap (SpliceD NoExt)) splices)
-                        ++ (map (fmap (ValD NoExt)) binds)
-                        ++ (map (fmap (SigD NoExt)) sigs)
-                        ++ (map (fmap (TyClD NoExt)) (concat $ map group_tyclds tycls))
-                        ++ (map (fmap (DerivD NoExt)) derivs)
-                        ++ (map (fmap (SigD NoExt . FixSig NoExt)) (mergeFixityDefs fixities))
-                        ++ (map (fmap (DefD NoExt)) defaults)
-                        ++ (map (fmap (ForD NoExt)) foreigns)
-                        ++ (map (fmap (WarningD NoExt)) warns)
-                        ++ (map (fmap (AnnD NoExt)) anns)
-                        ++ (map (fmap (RuleD NoExt)) rules)
-                        ++ (map (fmap (InstD NoExt)) (hsGroupInstDecls g))
+           alldecls = let declsLoc = (map (fmap (SpliceD NoExt)) splices)
+                                        ++ (map (fmap (ValD NoExt)) binds)
+                                        ++ (map (fmap (SigD NoExt)) sigs)
+                                        ++ (map (fmap (TyClD NoExt)) (concat $ map group_tyclds tycls))
+                                        ++ (map (fmap (DerivD NoExt)) derivs)
+                                        ++ (map (fmap (SigD NoExt . FixSig NoExt)) (mergeFixityDefs fixities))
+                                        ++ (map (fmap (DefD NoExt)) defaults)
+                                        ++ (map (fmap (ForD NoExt)) foreigns)
+                                        ++ (map (fmap (WarningD NoExt)) warns)
+                                        ++ (map (fmap (AnnD NoExt)) anns)
+                                        ++ (map (fmap (RuleD NoExt)) rules)
+                                        ++ (map (fmap (InstD NoExt)) (hsGroupInstDecls g))
+                      in filter (\x -> isGoodSrcSpan $ getLoc x) declsLoc
        -- Declarations generated from TH should only be in scope after the splice.
        let (genNames, sourceNames) = partition (\d -> any (\spl -> getLoc spl `containsRealSpan` getLoc d) rdrSpls) alldecls
        addToCurrentScope sourceNames $ do

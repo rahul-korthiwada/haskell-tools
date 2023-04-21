@@ -45,7 +45,9 @@ trfModule mod hsMod = do
   !modInfo <- createModuleInfo mod (maybe noSrcSpan getLoc $ hsmodName $ unLoc hsMod) (hsmodImports $ unLoc hsMod)
   trfLocCorrect (pure modInfo)
      (\sr -> combineSrcSpans sr <$> (uniqueTokenAnywhere AnnEofPos))
-     (\(HsModule name exports imports decls deprec _) ->
+     (\(HsModule name exports imports declsLoc deprec _) ->
+        let decls = filter (\x -> isGoodSrcSpan $ getLoc x) declsLoc
+        in
         AST.UModule <$> trfFilePragmas
                     <*> trfModuleHead name (srcSpanStart (foldLocs (map getLoc imports ++ map getLoc decls))) exports deprec
                     <*> trfImports imports
