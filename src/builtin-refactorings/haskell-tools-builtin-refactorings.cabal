@@ -76,13 +76,8 @@ library
                      , Language.Haskell.Tools.Refactor.Builtin.ExtractBinding
                      , Language.Haskell.Tools.Refactor.Builtin.InlineBinding
                      , Language.Haskell.Tools.Refactor.Builtin.FloatOut
-                     , Language.Haskell.Tools.Refactor.Builtin.EPNG
-                     , Language.Haskell.Tools.Refactor.Builtin.ReturnToLet
-                     , Language.Haskell.Tools.Refactor.Builtin.FlowCtxt
-                     , Language.Haskell.Tools.Refactor.Builtin.Ref1
-                     , Language.Haskell.Tools.Refactor.Builtin.EPNG2
-                     , Language.Haskell.Tools.Refactor.Builtin.PrintTree
                      , Language.Haskell.Tools.Refactor.Builtin.GetMatches
+                     , Language.Haskell.Tools.Refactor.Builtin.LetRefactoring
                      , Language.Haskell.Tools.Refactor.Builtin.OrganizeExtensions
                      , Language.Haskell.Tools.Refactor.Builtin.ExtensionOrganizer.Checkers
                      , Language.Haskell.Tools.Refactor.Builtin.ExtensionOrganizer.ExtMap
@@ -91,6 +86,13 @@ library
                      , Language.Haskell.Tools.Refactor.Builtin.ExtensionOrganizer.TraverseAST
                      , Language.Haskell.Tools.Refactor.Builtin.ExtensionOrganizer.Instances.Checkable
                      , Language.Haskell.Tools.Refactor.Builtin.ExtensionOrganizer.Instances.AppSelector
+                     , Language.Haskell.Tools.Debug
+                     , Language.Haskell.Tools.Debug.DebugGhcAST
+                     , Language.Haskell.Tools.Debug.Show
+                     , Language.Haskell.Tools.Debug.RangeDebug
+                     , Language.Haskell.Tools.Debug.RangeDebugInstances
+                     , Language.Haskell.Tools.Refactor.Builtin.ShowTree
+                     , Language.Haskell.Tools.Refactor.Builtin.ChangeMonad
 
   other-modules:       Language.Haskell.Tools.Refactor.Builtin.ExtensionOrganizer.Checkers.ArrowsChecker
                      , Language.Haskell.Tools.Refactor.Builtin.ExtensionOrganizer.Checkers.BangPatternsChecker

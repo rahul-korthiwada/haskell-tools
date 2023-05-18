@@ -12,13 +12,10 @@ import Language.Haskell.Tools.Refactor.Builtin.OrganizeExtensions (organizeExten
 import Language.Haskell.Tools.Refactor.Builtin.OrganizeImports (organizeImportsRefactoring, projectOrganizeImportsRefactoring)
 import Language.Haskell.Tools.Refactor.Builtin.RenameDefinition (renameDefinitionRefactoring)
 import Language.Haskell.Tools.Refactor.Builtin.GetMatches (getMatchesQuery)
+import Language.Haskell.Tools.Refactor.Builtin.LetRefactoring (changeReturnToLetTypeRefactoring, projectChangePureToLetRefactoring)
+import Language.Haskell.Tools.Refactor.Builtin.ShowTree (showAstTree)
+import Language.Haskell.Tools.Refactor.Builtin.ChangeMonad (changeMonadRefactoring)
 import Language.Haskell.Tools.Refactor.Builtin.AutoCorrect
-import Language.Haskell.Tools.Refactor.Builtin.EPNG (changeEpngTypeRefactoring)
-import Language.Haskell.Tools.Refactor.Builtin.EPNG2 (changeEpngTypeRefactoring2)
-import Language.Haskell.Tools.Refactor.Builtin.PrintTree (printTreeRefactoring)
-import Language.Haskell.Tools.Refactor.Builtin.ReturnToLet (changePureToLetRefactoring)
-import Language.Haskell.Tools.Refactor.Builtin.FlowCtxt (changeContextTypeRefactoring)
-import Language.Haskell.Tools.Refactor.Builtin.Ref1 (ref1Refactoring)
 
 builtinRefactorings :: [RefactoringChoice]
 builtinRefactorings
@@ -33,12 +30,10 @@ builtinRefactorings
     , organizeExtensionsRefactoring
     , projectOrganizeExtensionsRefactoring
     , autoCorrectRefactoring
-    , changeEpngTypeRefactoring
-    , printTreeRefactoring
-    , changeContextTypeRefactoring
-    , changeEpngTypeRefactoring2
-    , changePureToLetRefactoring
-    , ref1Refactoring
+    , changeReturnToLetTypeRefactoring
+    , projectChangePureToLetRefactoring
+    , changeMonadRefactoring
+    , showAstTree
     ]
 
 builtinQueries :: [QueryChoice]

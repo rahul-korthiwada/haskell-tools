@@ -14,6 +14,7 @@ import Language.Haskell.TH.LanguageExtensions (Extension(..))
 import System.Directory (canonicalizePath)
 import System.FilePath
 import Outputable
+import DynamicLoading (initializePlugins)
 
 import CmdLineParser (CmdLineP(..), processArgs, Warn(..), Err(..))
 import DynFlags
@@ -28,7 +29,7 @@ import Outputable (Outputable(..), showSDocUnsafe, cat, (<>))
 import Packages (initPackages)
 import SrcLoc
 import HscMain
-import StringBuffer (hGetStringBuffer)
+import StringBuffer (hGetStringBuffer, lexemeToString, StringBuffer (..))
 
 import Language.Haskell.Tools.AST as AST
 import Language.Haskell.Tools.BackendGHC
@@ -179,20 +180,27 @@ loadModule workingDir moduleName
 -- | The final version of our AST, with type infromation added
 type TypedModule = Ann AST.UModule IdDom SrcTemplateStage
 
+strBufToStr :: StringBuffer -> String
+strBufToStr sb@(StringBuffer _ len _) = lexemeToString sb len
+
 -- | Get the typed representation of a Haskell module.
 parseTyped :: ModSummary -> Ghc TypedModule
-parseTyped modSum = withAlteredDynFlags (return . normalizeFlags) $ do
+parseTyped ms'' = do
+  hsc_env' <- getSession
+  dynflags' <- liftIO (initializePlugins hsc_env' (GHC.ms_hspp_opts ms''))
+  let modSum = ms'' { ms_hspp_opts = dynflags' }
   let hasCppExtension = Cpp `xopt` ms_hspp_opts modSum
       ms = modSumNormalizeFlags modSum
-  -- when (ApplicativeDo `xopt` ms_hspp_opts modSum) $ liftIO $ throwIO $ UnsupportedExtension "ApplicativeDo"
+  when (ApplicativeDo `xopt` ms_hspp_opts modSum) $ liftIO $ throwIO $ UnsupportedExtension "ApplicativeDo"
   -- when (OverloadedLabels `xopt` ms_hspp_opts modSum) $ liftIO $ throwIO $ UnsupportedExtension "OverloadedLabels"
-  -- when (ImplicitParams `xopt` ms_hspp_opts modSum) $ liftIO $ throwIO $ UnsupportedExtension "ImplicitParams"
+  when (ImplicitParams `xopt` ms_hspp_opts modSum) $ liftIO $ throwIO $ UnsupportedExtension "ImplicitParams"
   dyn <- getSessionDynFlags
   liftIO $ print $ "before parse: " ++ show (moduleNameFS <$> pluginModNames dyn) ++ " moduleName: " ++ (Module.moduleNameString $ moduleName $ ms_mod ms)
   --hs_env <- getSession
   --v <- liftIO $ runHsc hs_env $ hscFileFrontEnd ms
   --liftIO $ print "after hscFileFrontEnd"
   p <- parseModule ms
+  p' <- parseModule ms''
   liftIO $ print $ "after parse: " ++ (Module.moduleNameString $ moduleName $ ms_mod ms) ++ " dynflags: " ++ show (moduleNameFS <$> pluginModNames (ms_hspp_opts $ pm_mod_summary  p))
   liftIO $ print $ "ast parse: " ++ (showSDocUnsafe $ ppr $ pm_parsed_source p)
   tc <- typecheckModule p
@@ -201,19 +209,23 @@ parseTyped modSum = withAlteredDynFlags (return . normalizeFlags) $ do
   -- liftIO $ print $ "ast parse: " ++ show tc
   void $ GHC.loadModule tc -- when used with loadModule, the module will be loaded twice
   liftIO $ print $ "ast parse: " ++ (showSDocUnsafe $ ppr $ pm_parsed_source p)
-  let annots = pm_annotations p
+  let annots = pm_annotations p'
+  liftIO $ print $ "cpp parse: " ++ show hasCppExtension
   srcBuffer <- if hasCppExtension
-                    then liftIO $ hGetStringBuffer (getModSumOrig ms)
-                    else return (fromJust $ ms_hspp_buf $ pm_mod_summary p)
-  liftIO $ print "after srcBuffer"
-  withTempSession (\e -> e { hsc_dflags = ms_hspp_opts ms })
+                    then liftIO $ hGetStringBuffer (getModSumOrig ms'')
+                    else return (fromJust $ ms_hspp_buf $ pm_mod_summary p')
+  liftIO $ print $ "after srcBuffer" ++ (strBufToStr $ srcBuffer)
+  x <- withTempSession (\e -> e { hsc_dflags = ms_hspp_opts ms })
     $ (if hasCppExtension then prepareASTCpp else prepareAST) srcBuffer . placeComments (fst annots) (getNormalComments $ snd annots)
         <$> (addTypeInfos (typecheckedSource tc)
-               =<< (do parseTrf <- runTrf (fst annots) (getPragmaComments $ snd annots) $ trfModule ms (pm_parsed_source p)
-                       runTrf (fst annots) (getPragmaComments $ snd annots)
-                         $ trfModuleRename ms parseTrf
-                             (fromJust $ tm_renamed_source tc)
-                             (pm_parsed_source p)))
+               =<< (do parseTrf <- runTrf (fst annots) (getPragmaComments $ snd annots) $ trfModule ms (pm_parsed_source p')
+                       x <- runTrf (fst annots) (getPragmaComments $ snd annots)
+                              $ trfModuleRename ms parseTrf
+                                    (fromJust $ tm_renamed_source tc)
+                                    (pm_parsed_source p')
+                       return x))
+  liftIO $ print $ "after srcBuffer" ++ (prettyPrint x)
+  return x
 
 data UnsupportedExtension = UnsupportedExtension String
   deriving Show

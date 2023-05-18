@@ -20,9 +20,6 @@ library
                      , Language.Haskell.Tools.AST.Ann
                      , Language.Haskell.Tools.AST.SemaInfoTypes
                      , Language.Haskell.Tools.AST.SemaInfoClasses
-                     , Language.Haskell.Tools.Debug.RangeDebug
-                     , Language.Haskell.Tools.Debug.RangeDebugInstances
-                     , Language.Haskell.Tools.Debug.Show
 
   other-modules:       Language.Haskell.Tools.AST.Representation.Modules
                      , Language.Haskell.Tools.AST.Representation.TH
