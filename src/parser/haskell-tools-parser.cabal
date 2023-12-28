@@ -47,6 +47,8 @@ library
                      , shelly
                      , ghc-boot
                      , optparse-applicative
+                     , text
+                     , bytestring
   default-language:    Haskell2010
 
 executable ht-parse
