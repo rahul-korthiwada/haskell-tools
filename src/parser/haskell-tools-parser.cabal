@@ -18,6 +18,7 @@ library
                      , Language.Haskell.Tools.Parser.LetRefactoring
                      , Language.Haskell.Tools.Parser.RemoveWildCards
                      , Language.Haskell.Tools.Parser.SplitTypesInModule
+                     , Language.Haskell.Tools.Parser.LLMDataSetGeneration
 
   build-depends:       base                       
                      , aeson                     
