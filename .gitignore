@@ -18,3 +18,4 @@ stackage-test-logs
 *.hidden
 *.todo
 *.notes
+venv/

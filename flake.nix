@@ -163,6 +163,9 @@
               jailbreak = true;
               check = false;
             };
+            hls-cabal-plugin = {
+              check = false;
+            };
             # warp = {
             #   check = false;
             # };

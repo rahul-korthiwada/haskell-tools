@@ -297,7 +297,8 @@ trfDerivingStrategy :: (TransformName n r, HasCallStack) => Maybe (Located (Deri
 trfDerivingStrategy = trfMaybeDefault " " ""
                         (trfLocNoSema $ \case StockStrategy -> return AST.UStockStrategy
                                               AnyclassStrategy -> return AST.UAnyClassStrategy
-                                              NewtypeStrategy -> return AST.UNewtypeStrategy)
+                                              NewtypeStrategy -> return AST.UNewtypeStrategy
+                                              _ -> return AST.UAnyClassStrategy)
                         atTheStart
 
 trfInstanceRule :: (TransformName n r, HasCallStack) => Located (HsType (GhcPass n)) -> Trf (Ann AST.UInstanceRule (Dom (GhcPass r)) RangeStage)
