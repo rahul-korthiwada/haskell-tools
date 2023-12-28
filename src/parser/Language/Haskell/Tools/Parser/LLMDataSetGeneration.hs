@@ -13,7 +13,7 @@ import Language.Haskell.Tools.AST
 import Language.Haskell.Tools.Parser.ParseModule
 import Control.Monad (forM,when)
 import Data.Maybe (isJust,fromJust,fromMaybe,catMaybes)
-import System.Directory (doesDirectoryExist, getDirectoryContents)
+import System.Directory (doesDirectoryExist, getDirectoryContents,listDirectory)
 import System.FilePath (takeExtension, (</>))
 import System.IO
 import qualified Data.List
@@ -66,6 +66,11 @@ getAllHaskellModules dir = do
       else return [path | isHaskellFile path]
   return (concat paths)
 
+getVeryNextDirectoriesList :: FilePath -> IO [FilePath]
+getVeryNextDirectoriesList path = do
+  contents <- listDirectory path
+  filterM (\item -> doesDirectoryExist (path </> item)) (filter (\x -> not $ "." `isPrefixOf` x) contents)
+
 getModuleName :: String -> Maybe String
 getModuleName content = do
     let moduleLine = find ("module" `Data.List.isPrefixOf`) (lines content)
@@ -79,36 +84,37 @@ getFileContent filePath = (evaluate) =<< readFile filePath
 
 listHaskellFilesInDir :: String -> IO ()
 listHaskellFilesInDir dir = do
-    modules <- getAllHaskellModules dir
-    moduleNames <- forM modules $ \modulePath -> do
-        threadDelay 100
-        print ("reading file: " <> modulePath)
-        contents <- getFileContent modulePath
-        pure $ getModuleName contents
-    modulesAsJsonParquetRow <- forM (filter removeIfNothing $ zip modules moduleNames)
-                    $ \(modulePath,moduleName) -> do
-                        res <- try $ moduleParser modulePath (fromJust moduleName)
-                        case res of
-                            Right (modAST :: (Ann AST.UModule (Dom GhcPs) SrcTemplateStage)) -> do
-                                let moduleRow = createJsonParquetRow (prettyPrint modAST) modulePath MODULE
-                                case modAST of
-                                    (Ann _ (UModule (AnnListG _ filePragmas) (AnnMaybeG _ (Just (Ann _ (UModuleHead name pragma exports)))) (AnnListG _ modImports) (AnnListG _ modDecls))) ->
-                                        let modNameRow = createJsonParquetRow (prettyPrint name) modulePath NAME
-                                            headPragmaRow = createJsonParquetRow (prettyPrint pragma) modulePath PRAGMA
-                                            headExportRow = createJsonParquetRow (prettyPrint exports) modulePath EXPORT
-                                            filePragmasRows = map (\x -> createJsonParquetRow (prettyPrint x) modulePath PRAGMA) filePragmas
-                                            modImportsRows = map (\x -> createJsonParquetRow (prettyPrint x) modulePath IMPORTS) modImports
-                                            declRows = map (\x -> createJsonParquetRow (prettyPrint x) modulePath FUNCTION_TYPE_CLASS) modDecls
-                                        in pure $ Just $ [modNameRow,headPragmaRow,headExportRow,moduleRow] <> filePragmasRows <> modImportsRows <> declRows
-                                    (Ann _ (UModule (AnnListG _ filePragmas) _ (AnnListG _ modImports) (AnnListG _ modDecls))) ->
-                                        let filePragmasRows = map (\x -> createJsonParquetRow (prettyPrint x) modulePath PRAGMA) filePragmas
-                                            modImportsRows = map (\x -> createJsonParquetRow (prettyPrint x) modulePath IMPORTS) modImports
-                                            declRows = map (\x -> createJsonParquetRow (prettyPrint x) modulePath FUNCTION_TYPE_CLASS) modDecls
-                                        in pure $ Just $ [moduleRow] <> filePragmasRows <> modImportsRows <> declRows
-                                    _ -> pure $ Just [moduleRow]
-                                    _ -> pure $ Just [moduleRow]
-                            Left (err :: SomeException) -> appendFile "error.log" ((show err) <> " module_path: " <> modulePath <> " : "<> (fromMaybe "" moduleName)) *> pure Nothing
-    Data.ByteString.Lazy.writeFile "data.json" (encode $ concat $ catMaybes $ modulesAsJsonParquetRow)
+    repos <- getVeryNextDirectoriesList dir
+    mapM_ (\repo -> do
+                modules <- getAllHaskellModules (dir <> "/" <> repo)
+                moduleNames <- forM modules $ \modulePath -> do
+                    threadDelay 100
+                    print ("reading file: " <> modulePath)
+                    contents <- getFileContent modulePath
+                    pure $ getModuleName contents
+                modulesAsJsonParquetRow <- forM (filter removeIfNothing $ zip modules moduleNames)
+                                $ \(modulePath,moduleName) -> do
+                                    res <- try $ moduleParser modulePath (fromJust moduleName)
+                                    case res of
+                                        Right (modAST :: (Ann AST.UModule (Dom GhcPs) SrcTemplateStage)) -> do
+                                            let moduleRow = createJsonParquetRow (prettyPrint modAST) modulePath MODULE
+                                            case modAST of
+                                                (Ann _ (UModule (AnnListG _ filePragmas) (AnnMaybeG _ (Just (Ann _ (UModuleHead name pragma exports)))) (AnnListG _ modImports) (AnnListG _ modDecls))) ->
+                                                    let modNameRow = createJsonParquetRow (prettyPrint name) modulePath NAME
+                                                        headPragmaRow = createJsonParquetRow (prettyPrint pragma) modulePath PRAGMA
+                                                        headExportRow = createJsonParquetRow (prettyPrint exports) modulePath EXPORT
+                                                        filePragmasRows = map (\x -> createJsonParquetRow (prettyPrint x) modulePath PRAGMA) (filePragmas)
+                                                        modImportsRows = map (\x -> createJsonParquetRow (prettyPrint x) modulePath IMPORTS) modImports
+                                                        declRows = map (\x -> createJsonParquetRow (prettyPrint x) modulePath FUNCTION_TYPE_CLASS) modDecls
+                                                    in pure $ ([modNameRow,headPragmaRow,headExportRow,moduleRow]) <> (filePragmasRows) <> (modImportsRows) <> (declRows)
+                                                (Ann _ (UModule (AnnListG _ filePragmas) _ (AnnListG _ modImports) (AnnListG _ modDecls))) ->
+                                                    let filePragmasRows = map (\x -> createJsonParquetRow (prettyPrint x) modulePath PRAGMA) filePragmas
+                                                        modImportsRows = map (\x -> createJsonParquetRow (prettyPrint x) modulePath IMPORTS) modImports
+                                                        declRows = map (\x -> createJsonParquetRow (prettyPrint x) modulePath FUNCTION_TYPE_CLASS) modDecls
+                                                    in pure $ [moduleRow] <> filePragmasRows <> modImportsRows <> declRows
+                                        Left (err :: SomeException) -> appendFile "error.log" ((show err) <> " module_path: " <> modulePath <> " : "<> (fromMaybe "" moduleName)) *> pure []
+                Data.ByteString.Lazy.writeFile (repo <> ".json") (encode $ concat $ modulesAsJsonParquetRow)
+        ) repos
 
 replaceMultipleNewlines :: String -> String
 replaceMultipleNewlines = concat . map (\group -> if head group == '\n' then "\n" else group) . group
