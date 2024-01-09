@@ -156,35 +156,43 @@ data JSON_PARQUET_ROW = JSON_PARQUET_ROW {
   deriving stock (Generic,Show)
   deriving anyclass (ToJSON)
 
-getFucntionsStartAndEnd :: String -> IO [()]
+removeIfUnderTests :: (String, Maybe String) -> Bool
+removeIfUnderTests (path, second) = not $ any (\x -> x `isInfixOf` (map Char.toLower path)) ["/test/","/tests/"]
+
+getFucntionsStartAndEnd :: String -> IO ()
 getFucntionsStartAndEnd dir = do
-    modules <- getAllHaskellModules dir
-    moduleNames <- forM modules $ \modulePath -> do
-        threadDelay 100
-        print ("reading file: " <> modulePath)
-        contents <- getFileContent modulePath
-        pure $ getModuleName contents
-    forM (filter removeIfNothing $ zip modules moduleNames)
-            $ \(modulePath,moduleName) -> do
-                    eres <- try $ moduleParserGhc modulePath (fromJust moduleName)
-                    case eres of
-                        Left (err :: SomeException) -> appendFile "error.log" (show err <> ": " <> modulePath)
-                        Right (res) -> do
-                            let groupedfunctions = groupBy (\(a1,b1,c1) (a2, b2, c2) ->  a1 == a2) res
-                            contents <- (lines) <$> getFileContent modulePath
-                            -- print contents
-                            let functionsList = foldl' (\acc x ->
-                                                                let (funcName,s,e) = foldl'
-                                                                                (\(_,start,end) (funcName,start',end') ->
-                                                                                        let start'' = if start /= -1 && (start < start') then start else start'
-                                                                                            end'' = if end > end' then end else end'
-                                                                                        in (funcName,start'',end'')
-                                                                                ) ("",-1,-1) x
-                                                                    functionWithComments = loopAndBreak contents s e
-                                                                in acc <> [(funcName,s,e,functionWithComments)]
-                                                            ) [] groupedfunctions
-                            Data.ByteString.Lazy.writeFile ( "dump/" <> (fromJust moduleName) <> ".json") (encode $ functionsList)
-                            pure ()
+    repos <- getVeryNextDirectoriesList dir
+    mapM_ (\repo -> do
+        modules <- getAllHaskellModules (dir <> "/" <> repo)
+        createDirectoryIfMissing True ("dump" <> "/" <> repo) 
+        moduleNames <- forM modules $ \modulePath -> do
+            threadDelay 100
+            print ("reading file: " <> modulePath)
+            contents <- getFileContent modulePath
+            pure $ getModuleName contents
+        forM (filter removeIfUnderTests $ filter removeIfNothing $ zip modules moduleNames)
+                $ \(modulePath,moduleName) -> do
+                        eres <- try $ moduleParserGhc modulePath (fromJust moduleName)
+                        case eres of
+                            Left (err :: SomeException) -> appendFile ("dump" <> "/" <> repo <> "/" <> "error.log") (show err <> ": " <> modulePath)
+                            Right (res) -> do
+                                let groupedfunctions = groupBy (\(a1,b1,c1) (a2, b2, c2) ->  a1 == a2) res
+                                contents <- (lines) <$> getFileContent modulePath
+                                let functionsList = foldl' (\acc x ->
+                                                                    let (funcName,s,e) = foldl'
+                                                                                    (\(_,start,end) (funcName,start',end') ->
+                                                                                            let start'' = if start /= -1 && (start < start') then start else start'
+                                                                                                end'' = if end > end' then end else end'
+                                                                                            in (funcName,start'',end'')
+                                                                                    ) ("",-1,-1) x
+                                                                        functionWithComments = loopAndBreak contents s e
+                                                                    in acc <> [(funcName,s,e,functionWithComments)]
+                                                                ) [] groupedfunctions
+                                    withComments = filter (\(a,b,c,(code,comments)) -> (comments /= [])) functionsList
+                                    withoutComments = filter (\(a,b,c,(code,comments)) -> (comments == [])) functionsList
+                                    jsonObject = Object $ HM.fromList $ [((T.pack "withComments") ,toJSON withComments),((T.pack "withoutComments") ,toJSON withoutComments)]
+                                Data.ByteString.Lazy.writeFile ( "dump" <> "/" <> repo <> "/" <> (fromJust moduleName) <> ".json") (encode $ jsonObject)
+        ) repos
     where
         safeIndex :: [a] -> Int -> Maybe a
         safeIndex [] _ = Nothing
@@ -196,14 +204,13 @@ getFucntionsStartAndEnd dir = do
         takeComments :: Int -> [String] -> [String]
         takeComments idx [] = []
         takeComments idx l =
-            let el = traceShowId $ fromMaybe "" $ safeIndex l idx
-            in  if (traceShowId $ "--" `isPrefixOf` el)
+            let el = fromMaybe "" $ safeIndex l idx
+            in  if ("--" `isPrefixOf` el)
                     then ([el] ++ takeComments (idx - 1) l )
                     else []
 
         loopAndBreak :: [String] -> Int -> Int -> ([String], [String])
         loopAndBreak l start end =
             let function = catMaybes $ foldl' (\(list) x -> list <> [safeIndex l x] ) [] [(start - 1)..end]
-                comment  = traceShowId $ takeComments ( traceShowId $ start - 2) (traceShowId $  l)
+                comment  = takeComments ( start - 2) ( l)
             in (function,comment)
-

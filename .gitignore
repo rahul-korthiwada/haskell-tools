@@ -19,3 +19,7 @@ stackage-test-logs
 *.todo
 *.notes
 venv/
+*.dyn_*
+*.json
+*.log
+*.txt
