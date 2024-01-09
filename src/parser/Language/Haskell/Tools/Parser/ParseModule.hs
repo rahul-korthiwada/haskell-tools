@@ -3,7 +3,7 @@
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts, TypeFamilies, DataKinds #-}
 module Language.Haskell.Tools.Parser.ParseModule where
   
 import Debug.Trace
@@ -146,6 +146,44 @@ moduleParser modulePath moduleName = do
     newAst <- runGhc (Just libdir) $ (prepareAST) sourceOrigin . placeComments (fst annots) (getNormalComments $ snd annots)
         <$> (runTrf (fst annots) (getPragmaComments $ snd annots) $ trfModule' modSum $ pm_parsed_source y)
     pure newAst
+
+moduleParserGhc :: String -> String -> IO [(String,Int,Int)]
+moduleParserGhc modulePath moduleName = do
+    dflags <- runGhc (Just libdir) getSessionDynFlags
+    pp <- getCurrentDirectory
+    print (replace (replace "." "/" moduleName) "" $ replace ".hs" "" modulePath)
+    modSum <- runGhc (Just libdir) $ loadModule (replace (replace "." "/" moduleName) "" $ replace ".hs" "" modulePath) moduleName
+    y <- runGhc (Just libdir) $ parseModule modSum
+    let annots = pm_annotations y
+    runGhc (Just libdir) $ mapM getFunctionInfo $ getFunctions $ unLoc $ pm_parsed_source y
+    where
+      getFunctionInfo :: (Located (HsDecl GhcPs),String) -> Ghc (String,Int,Int)
+      getFunctionInfo (decl,name) = do
+        let startLine = maybe 0 srcLocLine $ extractRealSrcLoc $ (srcSpanStart (getLoc decl))
+            endLine   = maybe 0 srcLocLine $ extractRealSrcLoc $ (srcSpanEnd (getLoc decl))
+        liftIO $ putStrLn $ (trim name) <> " : Function at lines " ++ show startLine ++ " - " ++ show endLine
+        pure $ (trim name,startLine,endLine)
+
+      extractRealSrcLoc :: SrcLoc -> Maybe RealSrcLoc
+      extractRealSrcLoc (RealSrcLoc x) = Just x
+      extractRealSrcLoc _ = Nothing
+
+      getFunctions :: (HsModule GhcPs) -> [(Located (HsDecl GhcPs),String)]
+      getFunctions parsedModule = do
+        -- let (functions, nonFunctions) = foldl' (\acc res -> do
+        --         if isFunction res
+        --           then ((fst acc Prelude.<> [(unLoc res)]),snd acc)
+        --           else ((fst acc),snd acc Prelude.<> [(unLoc res)])
+        --         ) ([],[]) (hsmodDecls $ parsedModule)
+        --     groupedFunctions = groupBy (\a b -> isFunSig a && isFunVal b ) functions
+        --     groupFunctionsMore = groupByUltimate groupedFunctions --unionBy (\a b -> getInfixlFun a b || getInfixlFun b a) (groupedFunctions)
+        concat $ map extractFunctions $ hsmodDecls (parsedModule)
+
+      extractFunctions :: LHsDecl GhcPs -> [(Located (HsDecl GhcPs),String)]
+      extractFunctions funD@(L _ (ValD _ decl)) = [(funD,getFunctionName $ showSDocUnsafe $ ppr $ funD)]
+      extractFunctions sigD@(L _ (SigD _ decl)) = [(sigD,getFunctionName $ showSDocUnsafe $ ppr $ sigD)]
+      extractFunctions _             = []
+
 
 isFunction :: _ -> Bool
 isFunction (L _ (SigD _ sigDecls)) = True

@@ -49,7 +49,13 @@ import Language.Haskell.Tools.Parser.ParseModule
 import Language.Haskell.Tools.Debug.RangeDebug
 import Language.Haskell.Tools.Debug.RangeDebugInstances
 import qualified Data.Text as T
+import Language.Haskell.Tools.AST
+import Language.Haskell.Tools.Refactor
+import Control.Reference
+import Language.Haskell.Tools.PrettyPrint
 import qualified Data.Char as Char
+import Data.Generics.Uniplate.Data ()
+import Language.Haskell.Tools.AST.Representation.Binds (ULocalBind)
 
 isHaskellFile :: FilePath -> Bool
 isHaskellFile file = takeExtension file == ".hs"
@@ -149,3 +155,55 @@ data JSON_PARQUET_ROW = JSON_PARQUET_ROW {
 }
   deriving stock (Generic,Show)
   deriving anyclass (ToJSON)
+
+getFucntionsStartAndEnd :: String -> IO [()]
+getFucntionsStartAndEnd dir = do
+    modules <- getAllHaskellModules dir
+    moduleNames <- forM modules $ \modulePath -> do
+        threadDelay 100
+        print ("reading file: " <> modulePath)
+        contents <- getFileContent modulePath
+        pure $ getModuleName contents
+    forM (filter removeIfNothing $ zip modules moduleNames)
+            $ \(modulePath,moduleName) -> do
+                    eres <- try $ moduleParserGhc modulePath (fromJust moduleName)
+                    case eres of
+                        Left (err :: SomeException) -> appendFile "error.log" (show err <> ": " <> modulePath)
+                        Right (res) -> do
+                            let groupedfunctions = groupBy (\(a1,b1,c1) (a2, b2, c2) ->  a1 == a2) res
+                            contents <- (lines) <$> getFileContent modulePath
+                            -- print contents
+                            let functionsList = foldl' (\acc x ->
+                                                                let (funcName,s,e) = foldl'
+                                                                                (\(_,start,end) (funcName,start',end') ->
+                                                                                        let start'' = if start /= -1 && (start < start') then start else start'
+                                                                                            end'' = if end > end' then end else end'
+                                                                                        in (funcName,start'',end'')
+                                                                                ) ("",-1,-1) x
+                                                                    functionWithComments = loopAndBreak contents s e
+                                                                in acc <> [(funcName,s,e,functionWithComments)]
+                                                            ) [] groupedfunctions
+                            Data.ByteString.Lazy.writeFile ( "dump/" <> (fromJust moduleName) <> ".json") (encode $ functionsList)
+                            pure ()
+    where
+        safeIndex :: [a] -> Int -> Maybe a
+        safeIndex [] _ = Nothing
+        safeIndex (x:_) 0 = Just x
+        safeIndex (_:xs) n
+            | n < 0     = Nothing
+            | otherwise = safeIndex xs (n - 1)
+
+        takeComments :: Int -> [String] -> [String]
+        takeComments idx [] = []
+        takeComments idx l =
+            let el = traceShowId $ fromMaybe "" $ safeIndex l idx
+            in  if (traceShowId $ "--" `isPrefixOf` el)
+                    then ([el] ++ takeComments (idx - 1) l )
+                    else []
+
+        loopAndBreak :: [String] -> Int -> Int -> ([String], [String])
+        loopAndBreak l start end =
+            let function = catMaybes $ foldl' (\(list) x -> list <> [safeIndex l x] ) [] [(start - 1)..end]
+                comment  = traceShowId $ takeComments ( traceShowId $ start - 2) (traceShowId $  l)
+            in (function,comment)
+
