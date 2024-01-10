@@ -13,7 +13,7 @@ import Language.Haskell.Tools.AST
 import Language.Haskell.Tools.Parser.ParseModule
 import Control.Monad (forM,when)
 import Data.Maybe (isJust,fromJust,fromMaybe,catMaybes)
-import System.Directory (doesDirectoryExist, getDirectoryContents,listDirectory)
+import System.Directory (doesDirectoryExist, getDirectoryContents,listDirectory,createDirectoryIfMissing)
 import System.FilePath (takeExtension, (</>))
 import System.IO
 import qualified Data.List
