@@ -19,6 +19,7 @@ library
                      , Language.Haskell.Tools.Parser.RemoveWildCards
                      , Language.Haskell.Tools.Parser.SplitTypesInModule
                      , Language.Haskell.Tools.Parser.LLMDataSetGeneration
+                     , Language.Haskell.Tools.Parser.ParseAndGetGatewayInterface
 
   build-depends:       base                       
                      , aeson                     

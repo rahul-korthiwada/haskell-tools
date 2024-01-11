@@ -68,6 +68,7 @@ import qualified Data.Aeson as A
 import Data.List.Extra (replace)
 
 import Language.Haskell.Tools.AST.Representation.Binds (ULocalBind)
+import Debug.Trace
 
 
 
@@ -93,6 +94,11 @@ getFunctionDepOfModule moduleAST = do
         getAllRelatedFuns whereDeps funs funList = foldl' (\acc val -> case HM.lookup val funList of
                                                                     Just f -> acc ++ snd f
                                                                     Nothing -> acc) funs whereDeps
+
+getCaseMatchStatements :: String -> String -> IO [(String, [String])]
+getCaseMatchStatements modulePath moduleName = do
+    moduleAST <- moduleParser modulePath moduleName
+    pure $ concat $ mapMaybe (traverseOverUValBind') (moduleAST ^? biplateRef)
 
 suffixToBeAdded :: String
 suffixToBeAdded = "Split"
@@ -158,8 +164,32 @@ traverseOverUValBind expr@(Ann _ (UValueBinding (FunctionBind' ex))) = do
     Just (head funName, (tail funName, funDeps))
 traverseOverUValBind expr = Nothing
 
+traverseOverUValBind' :: Ann UDecl (Dom GhcPs) SrcTemplateStage -> Maybe [(String, [String])]
+traverseOverUValBind' expr@(Ann _ (UValueBinding (FunctionBind' ex))) = do
+    -- let !funName = map (getFunctionNameFromValBind) ((ex) ^? biplateRef)
+    let !gatewayList = catMaybes $ map getCaseMatchListFromValBind ((ex) ^? biplateRef)
+    Just (gatewayList)
+    -- let !funNameMap = trace (show gatewayList) $ (head funName, tail funName)
+    -- let !funDeps = concat $ map (getFunctionsCalledInFunction) (expr ^? biplateRef)
+    -- Just (head funName, (tail funName, funDeps))
+traverseOverUValBind' expr = Nothing
+
 getFunctionNameFromValBind :: Ann UMatchLhs (Dom GhcPs) SrcTemplateStage -> String
 getFunctionNameFromValBind expr@(Ann _ (UNormalLhs (Ann _ (UNormalName (Ann _ (UQualifiedName _ (Ann _ (UNamePart ex)))))) ex1)) = ex
+
+getCaseMatchListFromValBind :: Ann UMatch (Dom GhcPs) SrcTemplateStage -> Maybe (String, [String])
+getCaseMatchListFromValBind expr@(Ann _ (UMatch (Ann _ (UNormalLhs (Ann _ (UNormalName (Ann _ (UQualifiedName _ (Ann _ (UNamePart ex)))))) ex1)) (Ann _ (UUnguardedRhs (Ann _ (UDo _ exprStmts )))) _ )) = Just $ (ex, (concat $ catMaybes $ map (getCaseMatchGateway) (exprStmts ^? biplateRef)))
+    where
+
+        getCaseMatchGateway :: Ann UStmt (Dom GhcPs) SrcTemplateStage -> Maybe [String]
+        getCaseMatchGateway expr@(Ann _ (UBindStmt _ expr1@(Ann _ (UCase _ xalts)))) = Just $ catMaybes $ map (getGatewayExpr) (xalts ^? biplateRef) 
+        getCaseMatchGateway _ = Nothing
+        getGatewayExpr :: Ann UAlt (Dom GhcPs) SrcTemplateStage -> Maybe String
+        getGatewayExpr expr@(Ann _ (UAlt (Ann _ (UAppPat (Ann _ (UNormalName (Ann _ (UQualifiedName _ (Ann _ (UNamePart gatewayName)))))) _ )) _ _ )) = Just $ gatewayName
+        getGatewayExpr _ = Nothing
+getCaseMatchListFromValBind _ = Nothing
+
+
 
 getFunctionsCalledInFunction :: Ann URhs (Dom GhcPs) SrcTemplateStage -> [String]
 getFunctionsCalledInFunction expr = do

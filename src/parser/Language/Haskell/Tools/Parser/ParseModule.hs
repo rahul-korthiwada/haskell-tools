@@ -168,21 +168,21 @@ moduleParserGhc modulePath moduleName = do
       extractRealSrcLoc (RealSrcLoc x) = Just x
       extractRealSrcLoc _ = Nothing
 
-      getFunctions :: (HsModule GhcPs) -> [(Located (HsDecl GhcPs),String)]
-      getFunctions parsedModule = do
-        -- let (functions, nonFunctions) = foldl' (\acc res -> do
-        --         if isFunction res
-        --           then ((fst acc Prelude.<> [(unLoc res)]),snd acc)
-        --           else ((fst acc),snd acc Prelude.<> [(unLoc res)])
-        --         ) ([],[]) (hsmodDecls $ parsedModule)
-        --     groupedFunctions = groupBy (\a b -> isFunSig a && isFunVal b ) functions
-        --     groupFunctionsMore = groupByUltimate groupedFunctions --unionBy (\a b -> getInfixlFun a b || getInfixlFun b a) (groupedFunctions)
-        concat $ map extractFunctions $ hsmodDecls (parsedModule)
+getFunctions :: (HsModule GhcPs) -> [(Located (HsDecl GhcPs),String)]
+getFunctions parsedModule = do
+  -- let (functions, nonFunctions) = foldl' (\acc res -> do
+  --         if isFunction res
+  --           then ((fst acc Prelude.<> [(unLoc res)]),snd acc)
+  --           else ((fst acc),snd acc Prelude.<> [(unLoc res)])
+  --         ) ([],[]) (hsmodDecls $ parsedModule)
+  --     groupedFunctions = groupBy (\a b -> isFunSig a && isFunVal b ) functions
+  --     groupFunctionsMore = groupByUltimate groupedFunctions --unionBy (\a b -> getInfixlFun a b || getInfixlFun b a) (groupedFunctions)
+  concat $ map extractFunctions $ hsmodDecls (parsedModule)
 
-      extractFunctions :: LHsDecl GhcPs -> [(Located (HsDecl GhcPs),String)]
-      extractFunctions funD@(L _ (ValD _ decl)) = [(funD,getFunctionName $ showSDocUnsafe $ ppr $ funD)]
-      extractFunctions sigD@(L _ (SigD _ decl)) = [(sigD,getFunctionName $ showSDocUnsafe $ ppr $ sigD)]
-      extractFunctions _             = []
+extractFunctions :: LHsDecl GhcPs -> [(Located (HsDecl GhcPs),String)]
+extractFunctions funD@(L _ (ValD _ decl)) = [(funD,getFunctionName $ showSDocUnsafe $ ppr $ funD)]
+extractFunctions sigD@(L _ (SigD _ decl)) = [(sigD,getFunctionName $ showSDocUnsafe $ ppr $ sigD)]
+extractFunctions _             = []
 
 
 isFunction :: _ -> Bool
@@ -215,3 +215,13 @@ groupByUltimate = (HM.toList . foldl' (\acc x -> addToBucket acc x) HM.empty)
                 Just x -> x ++ [el]
                 _ -> [el]
           ) acc
+
+moduleParser' :: String -> String -> IO (HsModule GhcPs)
+moduleParser' modulePath moduleName = do
+    dflags <- runGhc (Just libdir) getSessionDynFlags
+    pp <- getCurrentDirectory
+    print (replace (replace "." "/" moduleName) "" $ replace ".hs" "" modulePath)
+    modSum <- runGhc (Just libdir) $ loadModule (replace (replace "." "/" moduleName) "" $ replace ".hs" "" modulePath) moduleName
+    y <- runGhc (Just libdir) $ parseModule modSum
+    let annots = pm_annotations y
+    pure $ unLoc $ pm_parsed_source y
