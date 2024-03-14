@@ -100,6 +100,11 @@ getCaseMatchStatements modulePath moduleName = do
     moduleAST <- moduleParser modulePath moduleName
     pure $ concat $ mapMaybe (traverseOverUValBind') (moduleAST ^? biplateRef)
 
+getConstructors :: String -> String -> IO [String]
+getConstructors modulePath moduleName = do
+    moduleAST <- moduleParser modulePath moduleName
+    pure $ mapMaybe (parseDataDec) (moduleAST ^? biplateRef)
+
 suffixToBeAdded :: String
 suffixToBeAdded = "Split"
 
@@ -167,6 +172,7 @@ traverseOverUValBind expr = Nothing
 traverseOverUValBind' :: Ann UDecl (Dom GhcPs) SrcTemplateStage -> Maybe [(String, [String])]
 traverseOverUValBind' expr@(Ann _ (UValueBinding (FunctionBind' ex))) = do
     -- let !funName = map (getFunctionNameFromValBind) ((ex) ^? biplateRef)
+     -- trace (show expr) $ 
     let !gatewayList = catMaybes $ map getCaseMatchListFromValBind ((ex) ^? biplateRef)
     Just (gatewayList)
     -- let !funNameMap = trace (show gatewayList) $ (head funName, tail funName)
@@ -174,21 +180,32 @@ traverseOverUValBind' expr@(Ann _ (UValueBinding (FunctionBind' ex))) = do
     -- Just (head funName, (tail funName, funDeps))
 traverseOverUValBind' expr = Nothing
 
+parseDataDec :: Ann UConDecl (Dom GhcPs) SrcTemplateStage -> Maybe String
+parseDataDec expr@(Ann _ (UConDecl _ _ (Ann _ (UNormalName (Ann _ (UQualifiedName _ (Ann _ (UNamePart ex)))))) _ )) = Just ex
+parseDataDec expr = Nothing
+
 getFunctionNameFromValBind :: Ann UMatchLhs (Dom GhcPs) SrcTemplateStage -> String
 getFunctionNameFromValBind expr@(Ann _ (UNormalLhs (Ann _ (UNormalName (Ann _ (UQualifiedName _ (Ann _ (UNamePart ex)))))) ex1)) = ex
 
 getCaseMatchListFromValBind :: Ann UMatch (Dom GhcPs) SrcTemplateStage -> Maybe (String, [String])
 getCaseMatchListFromValBind expr@(Ann _ (UMatch (Ann _ (UNormalLhs (Ann _ (UNormalName (Ann _ (UQualifiedName _ (Ann _ (UNamePart ex)))))) ex1)) (Ann _ (UUnguardedRhs (Ann _ (UDo _ exprStmts )))) _ )) = Just $ (ex, (concat $ catMaybes $ map (getCaseMatchGateway) (exprStmts ^? biplateRef)))
-    where
-
-        getCaseMatchGateway :: Ann UStmt (Dom GhcPs) SrcTemplateStage -> Maybe [String]
-        getCaseMatchGateway expr@(Ann _ (UBindStmt _ expr1@(Ann _ (UCase _ xalts)))) = Just $ catMaybes $ map (getGatewayExpr) (xalts ^? biplateRef) 
-        getCaseMatchGateway _ = Nothing
-        getGatewayExpr :: Ann UAlt (Dom GhcPs) SrcTemplateStage -> Maybe String
-        getGatewayExpr expr@(Ann _ (UAlt (Ann _ (UAppPat (Ann _ (UNormalName (Ann _ (UQualifiedName _ (Ann _ (UNamePart gatewayName)))))) _ )) _ _ )) = Just $ gatewayName
-        getGatewayExpr _ = Nothing
+getCaseMatchListFromValBind expr@(Ann _ (UMatch (Ann _ (UNormalLhs (Ann _ (UNormalName (Ann _ (UQualifiedName _ (Ann _ (UNamePart ex)))))) ex1)) (Ann _ (UUnguardedRhs (Ann _ (UInfixApp _ _ exprStmts )))) _ )) = Just $ (ex, fromMaybe [] $ (getCaseMatchGateway' exprStmts))
 getCaseMatchListFromValBind _ = Nothing
 
+getCaseMatchGateway :: Ann UStmt (Dom GhcPs) SrcTemplateStage -> Maybe [String]
+getCaseMatchGateway expr@(Ann _ (UBindStmt _ expr1@(Ann _ (UCase _ xalts)))) = Just $ catMaybes $ map (getGatewayExpr) (xalts ^? biplateRef) 
+getCaseMatchGateway expr@(Ann _ (UExprStmt expr1@(Ann _ (UCase _ xalts)))) = Just $ catMaybes $ map (getGatewayExpr) (xalts ^? biplateRef) 
+getCaseMatchGateway expr@(Ann _ (URecStmt expr1)) = Just $ concat $ (catMaybes $ map (getCaseMatchGateway) (expr1 ^? biplateRef))
+getCaseMatchGateway _ = Nothing
+
+getCaseMatchGateway' :: Ann UExpr (Dom GhcPs) SrcTemplateStage -> Maybe [String]
+getCaseMatchGateway' (Ann _ (UCase _ xalts)) = Just $ catMaybes $ map (getGatewayExpr) (xalts ^? biplateRef) 
+getCaseMatchGateway' _ = Nothing
+
+getGatewayExpr :: Ann UAlt (Dom GhcPs) SrcTemplateStage -> Maybe String
+getGatewayExpr expr@(Ann _ (UAlt (Ann _ (UAppPat (Ann _ (UNormalName (Ann _ (UQualifiedName _ (Ann _ (UNamePart gatewayName)))))) _ )) _ _ )) = Just $ gatewayName
+getGatewayExpr expr@(Ann _ (UAlt (Ann _ (ULitPat (Ann _ (UStringLit gatewayName)) )) _ _ )) = Just $ gatewayName
+getGatewayExpr _ = Nothing
 
 
 getFunctionsCalledInFunction :: Ann URhs (Dom GhcPs) SrcTemplateStage -> [String]

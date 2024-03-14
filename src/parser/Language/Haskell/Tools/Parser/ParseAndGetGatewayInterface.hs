@@ -39,21 +39,37 @@ import Language.Haskell.Tools.AST
 import Language.Haskell.Tools.Parser.ParseModule
 import Language.Haskell.Tools.Parser.SplitModule
 import qualified Data.Set as DS
-import Data.Char (isUpper)
+import Data.Char (isLower)
 import qualified Data.Map as DM
 
 isAllUppercase :: String -> Bool
-isAllUppercase = all isUpper
+isAllUppercase = not . any isLower
 
-main :: IO ()
-main = do
+getFunctionStatements :: IO ()
+getFunctionStatements = do
     functionToCaseMatchStatements <- getCaseMatchStatements "/home/juspay/Documents/code/euler-api-gateway/src/" "Euler.API.Gateway.Gateway.Common"
     -- let functionsList = getFunctions parsedModule
     let gateways = filter isAllUppercase $  DS.toList $ DS.fromList $ concat $ map (\(a,b) -> b) functionToCaseMatchStatements
     let fCM = map (\(a,b) -> (a, DS.fromList b)) functionToCaseMatchStatements
-    let stringOfValues = foldl' (\b (fN, fM) -> b <> "\n" <> fN <> ((intercalate "," ((\gw -> if DS.member gw fM then "True" else "False") <$> gateways))) ) ("," <> (intercalate "," (gateways))) fCM
+    let stringOfValues = foldl' (\b (fN, fM) -> b <> "\n" <> fN <> "," <> ((intercalate "," ((\gw -> if DS.member gw fM then "True" else "False") <$> gateways))) ) ("," <> (intercalate "," (gateways))) fCM
     -- print 
     print(stringOfValues)
+    print(functionToCaseMatchStatements)
+    pure ()
+
+getWebhookGateways :: IO ()
+getWebhookGateways = do
+    functionToCaseMatchStatements <- getCaseMatchStatements "/home/juspay/Documents/code/euler-api-gateway/src/" "Euler.API.Gateway.Gateway.Common"
+    let gateways = lookup "extractWebhookResponse" functionToCaseMatchStatements
+    functionToCaseMatchStatements' <- getCaseMatchStatements "/home/juspay/Documents/code/euler-api-txns/euler-x/src-generated/" "Gateway.CommonGateway"
+    let gatewaysInTxn = lookup "extractWebhookResponse" functionToCaseMatchStatements'
+    
+    let finalGateways = DS.fromList ((fromMaybe []  gateways) <> fromMaybe [] gatewaysInTxn)
+    totalGatewayList <- getConstructors "/home/juspay/Documents/code/euler-api-txns/euler-x/src-generated/" "Gateway.CommonGateway"
+    print $ length (fromMaybe []  gateways)
+    print $ length (fromMaybe []  gatewaysInTxn)
+    print $ length (DS.toList finalGateways)
+    print $ (DS.fromList totalGatewayList DS.\\ finalGateways)
     pure ()
 
 -- getASTFunctions :
